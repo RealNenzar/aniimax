@@ -5,6 +5,7 @@ import {
     MAX_HOME_LEVEL, ANIIMO_MAX, simpleSetup,
     LEVEL_UP_COSTS, LEVEL_UP_CHAINS, SPECIAL_RECIPES, SEASON, ANIIPOD_TIERS, PERSONALITY_PAIRS, personalityLetter, opposedPersonality,
 } from './facility-config.js';
+import { allocateTurnJobs } from './turn-jobs.js';
 
 let wasmReady = false;
 
@@ -1076,8 +1077,8 @@ function homelandPieces(plan, input) {
         pieces.push({ cluster: true, buildings, plots, planned });
     });
 
-    // Recipes taking turns on the same units (the Bench's and Kiln's tiers) share them: as many
-    // units as their busy time together needs, each running every tier in turn at its share.
+    // For every facility type, recipes allowed to take turns share a unit only when there are not
+    // enough owned units to give each recipe its own. No facility names are special-cased here.
     const takesTurns = step => step.status === 'producing' && !!recipeIndex.find(r => r.name === step.item_name)?.turns;
     const turnGroups = new Map();
     steps.filter(takesTurns).forEach(step => turnGroups.set(step.facility, [...(turnGroups.get(step.facility) || []), step]));
@@ -1087,14 +1088,13 @@ function homelandPieces(plan, input) {
             unplaced.add(facility);
             return;
         }
-        const busy = rows.reduce((sum, r) => sum + (r.busy_units ?? r.facility_count), 0);
-        const n = Math.max(1, Math.ceil(busy - 1e-6));
-        const jobs = rows.filter(r => r.cycle_time > 0).map(r => ({ item: r.item_name, cycle: r.cycle_time, rate: (r.busy_units ?? r.facility_count) / r.cycle_time / n }));
-        const weight = jobs.reduce((sum, j) => sum + j.rate * 3600, 0);
-        for (let i = 0; i < n; i++) {
+        const owned = tierCount(input.facilities[facility]);
+        const allocations = allocateTurnJobs(rows, owned);
+        allocations.forEach(jobs => {
+            const weight = jobs.reduce((sum, j) => sum + j.rate * 3600, 0);
             pieces.push({ members: [{ x: 0, y: 0, w: footprint[0], h: footprint[1], weight, jobs, cycle: jobs[0]?.cycle, facility, crop: jobs[0]?.item ?? null, sensitive: false }] });
-        }
-        count(facility, n);
+        });
+        count(facility, allocations.length);
     });
 
     // Everything else, one unit at a time; environment crops no map took count here too.
