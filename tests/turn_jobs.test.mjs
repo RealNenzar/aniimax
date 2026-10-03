@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { allocateTurnFacilities, allocateTurnJobs } from '../web/turn-jobs.js';
+import { allocateTurnFacilities, allocateTurnJobs, redistributeTurnFacilityRows } from '../web/turn-jobs.js';
 
 const row = (item_name, busy_units, facility_count = 1) => ({
     item_name,
@@ -65,4 +65,37 @@ test('RV 10 layout contains exactly the two owned Benches and Kilns despite idle
     assert.equal(layout.get('Woodworking Bench').length, 2);
     assert.equal(layout.get('Chimney Kiln').length, 2);
     assert.equal([...layout.values()].reduce((sum, units) => sum + units.length, 0), 4);
+});
+
+test('facility table removes stale idle rows after recipes use every owned unit', () => {
+    const producing = (facility, item, busy) => ({ ...row(item, busy), facility, status: 'producing', turns: true });
+    const idle = facility => ({ facility, item_name: null, facility_count: 1, cycle_time: null, status: 'idle' });
+    const steps = [
+        producing('Woodworking Bench', 'rough_lumber', 0.6),
+        producing('Woodworking Bench', 'standard_planks', 0.4),
+        idle('Woodworking Bench'),
+        producing('Chimney Kiln', 'coarse_sifted_ore', 0.55),
+        producing('Chimney Kiln', 'sintered_ore_brick', 0.45),
+        idle('Chimney Kiln'),
+    ];
+
+    const shown = redistributeTurnFacilityRows(steps, () => 2, step => step.status === 'producing' && step.turns);
+
+    for (const facility of ['Woodworking Bench', 'Chimney Kiln']) {
+        const rows = shown.filter(step => step.facility === facility);
+        assert.equal(rows.reduce((sum, step) => sum + step.facility_count, 0), 2);
+        assert.ok(rows.every(step => step.status === 'producing'));
+    }
+});
+
+test('facility table keeps only the physical units that remain idle', () => {
+    const steps = [
+        { ...row('tier_1', 0.5), facility: 'Any Facility', status: 'producing', turns: true },
+        { facility: 'Any Facility', item_name: null, facility_count: 2, cycle_time: null, status: 'idle' },
+    ];
+
+    const shown = redistributeTurnFacilityRows(steps, () => 3, step => step.status === 'producing' && step.turns);
+    const idle = shown.find(step => step.status === 'idle');
+    assert.equal(shown.reduce((sum, step) => sum + step.facility_count, 0), 3);
+    assert.equal(idle.facility_count, 2);
 });

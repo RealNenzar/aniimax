@@ -68,3 +68,20 @@ export function allocateTurnFacilities(steps, ownedFor, takesTurns) {
     });
     return new Map([...rowsByFacility].map(([facility, rows]) => [facility, allocateTurnJobs(rows, ownedFor(facility))]));
 }
+
+// Match the facility-plan table to the redistributed physical units. Producing recipe rows remain
+// separate, but the solver's old idle row is removed or reduced to the units that are still idle
+// after the recipes have been spread across the owned units.
+export function redistributeTurnFacilityRows(steps, ownedFor, takesTurns) {
+    const allocations = allocateTurnFacilities(steps, ownedFor, takesTurns);
+    const idleByFacility = new Map([...allocations].map(([facility, units]) => [facility, units.filter(jobs => jobs.length === 0).length]));
+    const idleShown = new Set();
+
+    return steps.flatMap(step => {
+        if (!allocations.has(step.facility) || step.status === 'producing') return [step];
+        const idle = idleByFacility.get(step.facility) || 0;
+        if (idle <= 0 || idleShown.has(step.facility)) return [];
+        idleShown.add(step.facility);
+        return [{ ...step, facility_count: idle }];
+    });
+}

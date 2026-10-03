@@ -5,7 +5,7 @@ import {
     MAX_HOME_LEVEL, ANIIMO_MAX, simpleSetup,
     LEVEL_UP_COSTS, LEVEL_UP_CHAINS, SPECIAL_RECIPES, SEASON, ANIIPOD_TIERS, PERSONALITY_PAIRS, personalityLetter, opposedPersonality,
 } from './facility-config.js';
-import { allocateTurnFacilities } from './turn-jobs.js';
+import { allocateTurnFacilities, redistributeTurnFacilityRows } from './turn-jobs.js';
 
 let wasmReady = false;
 
@@ -1019,6 +1019,7 @@ function tripsPerUnit(step) {
 // Whether a crop needs a growing environment: grown without one, a building's temperature
 // would change it. Crops that need none grow the same anywhere.
 const needsEnvironment = item => !!recipeIndex.find(r => r.name === item)?.environment;
+const takesTurns = step => step.status === 'producing' && !!recipeIndex.find(r => r.name === step.item_name)?.turns;
 
 // The plan as pieces for `layOut`: environment blocks, then one piece per other facility unit,
 // then whatever the player owns that the plan doesn't use.
@@ -1079,7 +1080,6 @@ function homelandPieces(plan, input) {
 
     // For every facility type, recipes allowed to take turns share a unit only when there are not
     // enough owned units to give each recipe its own. No facility names are special-cased here.
-    const takesTurns = step => step.status === 'producing' && !!recipeIndex.find(r => r.name === step.item_name)?.turns;
     const turnAllocations = allocateTurnFacilities(steps, facility => tierCount(input.facilities[facility]), takesTurns);
     turnAllocations.forEach((allocations, facility) => {
         const footprint = FACILITY_FOOTPRINTS[facility];
@@ -3434,7 +3434,11 @@ function renderEnvironmentDiagram(layout, mode, building, rows = [], unit = null
 // else falls back to the original per-facility-category grouping (FACILITY_CATEGORIES).
 function renderFacilityPlan(plan) {
     const container = document.getElementById('facility-plan-container');
-    const steps = plan.coin_items || [];
+    const steps = redistributeTurnFacilityRows(
+        plan.coin_items || [],
+        facility => tierCount(lastPlanInput?.facilities?.[facility]),
+        takesTurns
+    );
 
     if (steps.length === 0) {
         container.innerHTML = '<p class="hint">Nothing profitable to produce with the current facilities.</p>';
