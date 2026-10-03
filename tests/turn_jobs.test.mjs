@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { allocateTurnJobs } from '../web/turn-jobs.js';
+import { allocateTurnFacilities, allocateTurnJobs } from '../web/turn-jobs.js';
 
 const row = (item_name, busy_units, facility_count = 1) => ({
     item_name,
@@ -27,4 +27,42 @@ test('splits workloads above one unit without exceeding owned capacity', () => {
     machines.forEach(jobs => assert.ok(jobs.reduce((sum, job) => sum + job.rate * job.cycle, 0) <= 1 + 1e-9));
     assert.equal(machines.flat().filter(job => job.item === 'rough_lumber').reduce((sum, job) => sum + job.rate * job.cycle, 0), 1.2);
     assert.equal(machines.flat().filter(job => job.item === 'standard_planks').reduce((sum, job) => sum + job.rate * job.cycle, 0), 0.6);
+});
+
+test('complete layout never exceeds owned units when the plan also contains an idle row', () => {
+    const planRows = [
+        row('rough_lumber', 0.6),
+        row('standard_planks', 0.4),
+        { item_name: null, busy_units: null, facility_count: 1, cycle_time: null, status: 'idle' },
+    ];
+    const machines = allocateTurnJobs(planRows, 2);
+
+    assert.equal(machines.length, 2);
+    assert.deepEqual(machines.map(jobs => jobs.map(job => job.item)), [['rough_lumber'], ['standard_planks']]);
+});
+
+test('complete layout includes idle physical units up to the owned count', () => {
+    const machines = allocateTurnJobs([row('rough_lumber', 0.5)], 2);
+
+    assert.equal(machines.length, 2);
+    assert.deepEqual(machines.map(jobs => jobs.map(job => job.item)), [['rough_lumber'], []]);
+});
+
+test('RV 10 layout contains exactly the two owned Benches and Kilns despite idle plan rows', () => {
+    const producing = (facility, item, busy) => ({ ...row(item, busy), facility, status: 'producing', turns: true });
+    const idle = facility => ({ facility, item_name: null, facility_count: 1, cycle_time: null, status: 'idle' });
+    const steps = [
+        producing('Woodworking Bench', 'rough_lumber', 0.6),
+        producing('Woodworking Bench', 'standard_planks', 0.4),
+        idle('Woodworking Bench'),
+        producing('Chimney Kiln', 'coarse_sifted_ore', 0.55),
+        producing('Chimney Kiln', 'sintered_ore_brick', 0.45),
+        idle('Chimney Kiln'),
+    ];
+
+    const layout = allocateTurnFacilities(steps, () => 2, step => step.status === 'producing' && step.turns);
+
+    assert.equal(layout.get('Woodworking Bench').length, 2);
+    assert.equal(layout.get('Chimney Kiln').length, 2);
+    assert.equal([...layout.values()].reduce((sum, units) => sum + units.length, 0), 4);
 });

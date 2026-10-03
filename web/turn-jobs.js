@@ -10,7 +10,8 @@ export function allocateTurnJobs(rows, owned) {
             units: Math.max(0, row.facility_count || 0),
         }))
         .filter(row => row.busy > 1e-9);
-    if (!usable.length || owned <= 0) return [];
+    if (owned <= 0) return [];
+    if (!usable.length) return Array.from({ length: owned }, () => []);
 
     const totalBusy = usable.reduce((sum, row) => sum + row.busy, 0);
     const requested = usable.reduce((sum, row) => sum + row.units, 0);
@@ -50,5 +51,20 @@ export function allocateTurnJobs(rows, owned) {
         }
     });
 
-    return machines.filter(machine => machine.jobs.length).map(machine => machine.jobs);
+    // Return every physical unit, including idle ones. The caller can then replace the plan's
+    // original idle row instead of drawing it in addition to these redistributed active units.
+    while (machines.length < owned) machines.push({ busy: 0, jobs: [] });
+    return machines.map(machine => machine.jobs);
+}
+
+// Build the complete physical-unit allocation for every facility with a producing turn-capable
+// recipe. All rows for those facilities are consumed here, including idle rows, so callers must
+// not render the same rows again through their ordinary facility path.
+export function allocateTurnFacilities(steps, ownedFor, takesTurns) {
+    const facilities = new Set(steps.filter(takesTurns).map(step => step.facility));
+    const rowsByFacility = new Map();
+    steps.filter(step => facilities.has(step.facility)).forEach(step => {
+        rowsByFacility.set(step.facility, [...(rowsByFacility.get(step.facility) || []), step]);
+    });
+    return new Map([...rowsByFacility].map(([facility, rows]) => [facility, allocateTurnJobs(rows, ownedFor(facility))]));
 }
