@@ -14,6 +14,7 @@ use aniimax::{
     models::{FacilityCounts, ModuleLevels, Worker, Workers},
     optimizer::{calculate_efficiencies, calculate_energy_efficiencies, find_best_production_path, find_parallel_production_path, find_self_sufficient_path},
 };
+use aniimax::locale::zh_tw;
 
 /// Facilities an Aniimo works, where its ability level and personality bonus set the speed.
 const WORKER_FACILITIES: [&str; 17] = [
@@ -187,6 +188,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let requested = argv.windows(2).find(|pair| pair[0] == "--language").map(|pair| pair[1].as_str())
         .or_else(|| argv.iter().find_map(|arg| arg.strip_prefix("--language=")));
     let language = if requested == Some("ru") { Language::Ru } else { Language::En };
+    let language = if requested.is_some_and(zh_tw::is_code) { Language::ZhTw } else { language };
     let mut command = Args::command();
     if language == Language::Ru {
         command = command.about(language.text("Optimize production paths for currency generation in Aniimo Homeland").to_owned())
@@ -207,7 +209,22 @@ fn main() -> Result<(), Box<dyn Error>> {
             return Ok(());
         }
     }
+    if language == Language::ZhTw {
+        command = zh_tw::localize_command(command);
+        if argv.iter().any(|arg| arg == "--help" || arg == "-h") {
+            print!("{}", zh_tw::help_text(command.render_long_help().to_string()));
+            return Ok(());
+        }
+    }
     let matches = command.try_get_matches_from(argv).unwrap_or_else(|error| {
+        if language == Language::ZhTw {
+            if error.exit_code() == 0 {
+                print!("{error}");
+                std::process::exit(0);
+            }
+            eprint!("{}", zh_tw::error_text(error.to_string()));
+            std::process::exit(error.exit_code());
+        }
         if language == Language::Ru {
             if error.exit_code() == 0 {
                 print!("{error}");
@@ -270,6 +287,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let target_label = match (args.language, args.currency.as_str()) {
         (Language::Ru, "wood_blocks") => "Wood Blocks",
         (Language::Ru, "mineral_sand") => "Mineral Sand",
+        (Language::ZhTw, "wood_blocks") => "Wood Blocks",
+        (Language::ZhTw, "mineral_sand") => "Mineral Sand",
         (_, currency) => currency,
     };
     println!("  {} {:.0} {}", args.language.text("Target:"), args.target, args.language.text(target_label));
@@ -299,6 +318,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         ("Crafting Table", args.crafting_table, args.crafting_table_level),
         ("Simmering Pot", args.simmering_pot, args.simmering_pot_level),
     ] {
+        if args.language == Language::ZhTw {
+            println!("  {} {} x {}{}", zh_tw::pad_end(zh_tw::text(name), 22), count, zh_tw::text("Lv."), level);
+            continue;
+        }
         println!("  {:<22} {} x {}{}", args.language.text(name), count, args.language.text("Lv."), level);
     }
 
@@ -310,6 +333,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         ("Resource Detector", args.resource_detector),
         ("Crafting Module", args.crafting_module),
     ] {
+        if args.language == Language::ZhTw {
+            println!("  {} {}{}", zh_tw::pad_end(zh_tw::text(name), 22), zh_tw::text("Lv."), level);
+            continue;
+        }
         println!("  {:<22} {}{}", args.language.text(name), args.language.text("Lv."), level);
     }
 

@@ -584,6 +584,8 @@ cargo doc --open
 
 The web language selector and CLI `--language en|ru` use English by default. English UI text is the source; `web/locales/en.json` inventories its phrases for translation checks, and `web/locales/ru.json` maps them to Russian. To add a language, add a matching JSON catalog and register its code and native label in `web/i18n.js`. Keep facility, item, and solver identifiers in English; translation happens only when results are displayed. Run `node tests/locale.test.mjs` to check catalog parity and switching.
 
+Traditional Chinese uses the code `zh-TW` in the web app and `--language zh-tw` in the CLI. The CLI also accepts `zh-TW` and `ZH-TW`. Its catalog is `web/locales/zh-TW.json`. Its own rules are in a zh-TW block in `web/i18n.js` and in `src/locale/zh_tw.rs`, so the other languages do not change. A phrase that the zh-TW catalog does not hold shows in English. Run `node tests/locale_zh_tw.test.mjs` and `cargo test --test zh_tw_locale_tests --test cli_language_tests` to check zh-TW.
+
 ### Building the Web App
 
 1. Install wasm-pack:
