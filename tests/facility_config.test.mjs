@@ -38,5 +38,11 @@ test('later RV levels apply confirmed maximum facility counts', () => {
             assert.equal(countAt(20, facility), count, `${facility} should keep its confirmed maximum afterward`);
         }
     }
+});
 
+test('RV 20 keeps the RV 19 grower limits', () => {
+    assert.equal(countAt(19, 'Farmland'), 40);
+    assert.equal(countAt(20, 'Farmland'), 40);
+    assert.equal(countAt(19, 'Woodland'), 20);
+    assert.equal(countAt(20, 'Woodland'), 20);
 });
